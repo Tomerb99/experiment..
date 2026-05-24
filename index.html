@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>אלפא - סייען פיננסי אישי</title>
+    <style>
+        /* ... (השאר את ה-CSS כפי שהוא) ... */
+        :root { --primary-color: #2563eb; --bg-color: #f8fafc; --chat-bg: #ffffff; --text-main: #1e293b; --bot-msg: #f1f5f9; --user-msg: #3b82f6; }
+        body { font-family: system-ui, -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+        #initOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; font-size: 1.1rem; font-weight: 500; }
+        .chat-container { width: 100%; max-width: 600px; height: 85vh; background: var(--chat-bg); border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); display: flex; flex-direction: column; overflow: hidden; display: none; }
+        .chat-header { background: var(--primary-color); color: white; padding: 18px; text-align: center; font-weight: bold; font-size: 1.2rem; }
+        .chat-messages { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .message { max-width: 80%; padding: 12px 16px; border-radius: 12px; line-height: 1.5; font-size: 1rem; animation: appRender 0.3s ease; }
+        .message.bot { background: var(--bot-msg); align-self: flex-start; border-top-right-radius: 2px; }
+        .message.user { background: var(--user-msg); color: white; align-self: flex-end; border-top-left-radius: 2px; }
+        .meta-node { margin-top: 8px; padding-top: 8px; border-top: 1px solid #cbd5e1; font-size: 0.8rem; color: #64748b; }
+        .chat-input-area { padding: 16px; border-top: 1px solid #e2e8f0; background: #f1f5f9; }
+        .quick-replies { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+        .btn { background: white; border: 1px solid var(--primary-color); color: var(--primary-color); padding: 10px 20px; border-radius: 20px; cursor: pointer; font-weight: 500; transition: all 0.2s; font-size: 0.95rem; }
+        .btn:hover { background: var(--primary-color); color: white; }
+        .btn-redirect { background: #10b981; color: white; border: none; width: 100%; padding: 14px; font-size: 1.1rem; font-weight: bold; border-radius: 8px; display: none; text-align: center; text-decoration: none; box-shadow: 0 4px 6px rgb(16 185 129 / 0.2); }
+        .btn-redirect:hover { background: #059669; }
+        .state-loader { display: flex; align-items: center; gap: 4px; padding: 12px 16px; background: var(--bot-msg); border-radius: 12px; align-self: flex-start; display: none; }
+        .state-loader span { width: 8px; height: 8px; background: #94a3b8; border-radius: 50%; animation: pulseBlock 1.4s infinite ease-in-out both; }
+        .state-loader span:nth-child(1) { animation-delay: -0.32s; }
+        .state-loader span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes pulseBlock { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        @keyframes appRender { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div id="initOverlay">טוען נתונים, אנא המתן...</div>
+
+<div class="chat-container" id="chatWindow">
+    <div class="chat-header">אלפא - סייען פיננסי אישי</div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-area">
+        <div class="quick-replies" id="interactionZone"></div>
+        <a href="#" class="btn-redirect" id="redirectBtn">להמשך לחץ כאן</a>
+    </div>
+</div>
+
+<script>
+    const ENDPOINT_URI = "https://experiment-373b8-default-rtdb.firebaseio.com/";
+    // כאן הכנסנו את הקישורים שלך
+    const surveyLinks = {
+        type_a: "https://docs.google.com/forms/d/e/1FAIpQLSfPj45N2cKPDC5qX8ZvFeJInO7EeEaOblnhXVP4C9RNU1Rumg/viewform?usp=pp_url&entry.474093785=A",
+        type_b: "https://docs.google.com/forms/d/e/1FAIpQLSfPj45N2cKPDC5qX8ZvFeJInO7EeEaOblnhXVP4C9RNU1Rumg/viewform?usp=pp_url&entry.474093785=B",
+        type_c: "https://docs.google.com/forms/d/e/1FAIpQLSfPj45N2cKPDC5qX8ZvFeJInO7EeEaOblnhXVP4C9RNU1Rumg/viewform?usp=pp_url&entry.474093785=C"
+    };
+
+    let renderExtendedNode = false;
+    let pulse_rate = 0;
+    let systemStep = 1;
+    let userTrack = 'type_a'; // משתנה שישמור את הקבוצה שנבחרה
+
+    // ... (השאר את ה-dataMatrix כפי שהוא) ...
+    const dataMatrix = { 1: { msg: "שלום. אני מבין שאתה מתלבט לגבי משיכת כספים מקרן ההשתלמות שלך. מדובר בהחלטה משמעותית. עליך לדעת שקרן השתלמות היא אפיק החיסכון היחיד בישראל כיום שפטור לחלוטין ממס רווחי הון (בגובה 25%) לאחר 6 שנים. אם תמשוך את הכסף כעת, תאבד את הפטור המלא הזה על כל הרווחים העתידיים שהכסף היה יכול לייצר.", meta: "<div class='meta-node'>📊 <b>מקורות:</b> סעיף 9(16א) לפקודת מס הכנסה; תקנות מס הכנסה (כללים לאישור וניהול קופות גמל), התשכ\"ד.</div>", actions: ["הבנתי, מהם הסיכונים הנוספים אם אמשוך?", "אני בכל זאת צריך את הכסף בדחיפות"] }, 2: { msg: "מעבר להפסד המס המיידי, יש כאן אלמנט קריטי של 'ריבית דריבית'. משיכה של 50,000 ש\"ח היום, למשל, לא עולה לך רק 50,000 ש\"ח. בקצב תשואה ממוצע של 5% בשנה, הסכום הזה אמור לצמוח לכמעט 82,000 ש\"ח בעשר השנים הבאות. משיכה כעת פוגעת אנושות בפוטנציאל הצמיחה של החיסכון שלך לטווח הארוך.", meta: "<div class='meta-node'>📊 <b>מקורות:</b> נתוני תשואות היסטוריים של מערכת 'גמל-נט', משרד האוצר; מודל חישוב אקטוארי של הון מצטבר.</div>", actions: ["אז מה השורה התחתונה שאתה ממליץ לי?", "האם יש חלופות למשיכה מלאה?"] }, 3: { msg: "השורה התחתונה וההמלצה המקצועית שלי: אם המטרה אינה חירום קיצוני (כמו הצלת חיים או מניעת קריסה כלכלית), מומלץ להשאיר את הקרן נזילה אך לא לגעת בה. אם אתה חייב תזרים מזומנים, החלופה הטובה ביותר היא לבקש 'הלוואה כנגד הקרן' מהחברה המנהלת. לרוב תקבל ריבית נמוכה מאוד (פריים מינוס חצי או סביב ה-P), בזמן שהכסף שלך ימשיך לעבוד ולצבור תשואה פטורה ממס.", meta: "<div class='meta-node'>📊 <b>מקורות:</b> חוזר הממונה על שוק ההון, ביטוח וחיסכון בעניין מתן הלוואות מקופות גמל; לוחות ריבית מסחריים מעודכנים לשנת 2026.</div>", actions: [] } };
+
+    async function initializeSystem() {
+        try {
+            const response = await fetch(`${ENDPOINT_URI}server_status.json`);
+            let sessionData = await response.json() || { type_a: 0, type_b: 0, type_c: 0 };
+
+            let activeTracks = ['type_a', 'type_b', 'type_c'].filter(t => (sessionData[t] || 0) < 30);
+            if (activeTracks.length === 0) { document.getElementById('initOverlay').innerText = "המערכת מלאה."; return; }
+
+            userTrack = activeTracks.reduce((prev, curr) => (sessionData[curr] || 0) < (sessionData[prev] || 0) ? curr : prev);
+            
+            await fetch(`${ENDPOINT_URI}server_status/${userTrack}.json`, { method: 'PUT', body: JSON.stringify((sessionData[userTrack] || 0) + 1) });
+
+            // הגדרת הלינק הדינמי
+            document.getElementById('redirectBtn').href = surveyLinks[userTrack];
+            
+            renderExtendedNode = (userTrack === 'type_b');
+            pulse_rate = (userTrack === 'type_c') ? 6000 : 0;
+
+            document.getElementById('initOverlay').style.display = 'none';
+            document.getElementById('chatWindow').style.display = 'flex';
+            executeStep(1);
+        } catch (err) { document.getElementById('initOverlay').innerText = "שגיאת חיבור."; }
+    }
+    
+    // ... (השאר את הפונקציות toggleLoader, executeStep, buildInterface, processUserNode כפי שהיו) ...
+    function toggleLoader(show) { const loader = document.getElementById('sysLoader'); if (show) { const l = document.createElement('div'); l.className = 'state-loader'; l.id = 'sysLoader'; l.innerHTML = '<span></span><span></span><span></span>'; document.getElementById('chatMessages').appendChild(l); l.style.display = 'flex'; } else if (loader) loader.remove(); }
+    function executeStep(step) { toggleLoader(true); setTimeout(() => { toggleLoader(false); const e = document.createElement('div'); e.className = 'message bot'; let s = dataMatrix[step].msg; if (renderExtendedNode) s += dataMatrix[step].meta; e.innerHTML = s; document.getElementById('chatMessages').appendChild(e); document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight; buildInterface(step); }, pulse_rate); }
+    function buildInterface(step) { const z = document.getElementById('interactionZone'); z.innerHTML = ''; const nodes = dataMatrix[step].actions; if (nodes.length > 0) { nodes.forEach(t => { const b = document.createElement('button'); b.className = 'btn'; b.innerText = t; b.onclick = () => processUserNode(t); z.appendChild(b); }); } else { z.style.display = 'none'; document.getElementById('redirectBtn').style.display = 'block'; } }
+    function processUserNode(t) { const e = document.createElement('div'); e.className = 'message user'; e.innerText = t; document.getElementById('chatMessages').appendChild(e); document.getElementById('interactionZone').innerHTML = ''; systemStep++; executeStep(systemStep); }
+    window.onload = initializeSystem;
+</script>
+</body>
+</html>
